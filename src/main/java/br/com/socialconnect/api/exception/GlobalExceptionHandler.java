@@ -22,25 +22,40 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> handleValidation(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
 
-        List<ProblemDetail.FieldError> errors = ex.getBindingResult()
-                .getFieldErrors().stream()
+        List<org.springframework.validation.FieldError> fieldErrors = ex.getBindingResult().getFieldErrors();
+
+        List<ProblemDetail.FieldError> errors = fieldErrors.stream()
                 .map(e -> new ProblemDetail.FieldError(
                         e.getField(),
                         e.getDefaultMessage()
                 ))
                 .collect(Collectors.toList());
 
+        boolean estoqueNegativo = !fieldErrors.isEmpty() && fieldErrors.stream().allMatch(this::isEstoqueNegativo);
+        HttpStatus status = estoqueNegativo ? HttpStatus.UNPROCESSABLE_ENTITY : HttpStatus.BAD_REQUEST;
+
         ProblemDetail problem = new ProblemDetail(
-                "https://socialconnect.api/errors/validacao",
-                "Erro de validação",
-                HttpStatus.BAD_REQUEST.value(),
-                "Um ou mais campos são inválidos.",
+                estoqueNegativo
+                        ? "https://socialconnect.api/errors/estoque-negativo"
+                        : "https://socialconnect.api/errors/validacao",
+                estoqueNegativo ? "Regra de negócio violada" : "Erro de validação",
+                status.value(),
+                estoqueNegativo
+                        ? "O estoque não pode ser negativo."
+                        : "Um ou mais campos são inválidos.",
                 request.getRequestURI(),
                 LocalDateTime.now(),
                 errors
         );
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+        return ResponseEntity.status(status).body(problem);
+    }
+
+    private boolean isEstoqueNegativo(org.springframework.validation.FieldError error) {
+        boolean campoEstoque = "estoqueAtual".equals(error.getField()) || "estoqueMinimo".equals(error.getField());
+        return campoEstoque
+                && error.getRejectedValue() instanceof Number valor
+                && valor.doubleValue() < 0;
     }
 
     // 2. CPF duplicado (409)
@@ -132,5 +147,39 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(NomeDuplicadoException.class)
+    public ResponseEntity<ProblemDetail> handleNomeDuplicado(
+            NomeDuplicadoException ex, HttpServletRequest request) {
+
+        ProblemDetail problem = new ProblemDetail(
+                "https://socialconnect.api/errors/nome-duplicado",
+                "Nome já cadastrado",
+                HttpStatus.CONFLICT.value(),
+                ex.getMessage(),
+                request.getRequestURI(),
+                LocalDateTime.now(),
+                List.of()
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    @ExceptionHandler(EstoqueNegativoException.class)
+    public ResponseEntity<ProblemDetail> handleEstoqueNegativo(
+            EstoqueNegativoException ex, HttpServletRequest request) {
+
+        ProblemDetail problem = new ProblemDetail(
+                "https://socialconnect.api/errors/estoque-negativo",
+                "Regra de negócio violada",
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                ex.getMessage(),
+                request.getRequestURI(),
+                LocalDateTime.now(),
+                List.of()
+        );
+
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(problem);
     }
 }

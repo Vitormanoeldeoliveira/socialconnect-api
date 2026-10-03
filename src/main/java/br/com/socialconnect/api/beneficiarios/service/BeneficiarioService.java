@@ -4,11 +4,11 @@ import br.com.socialconnect.api.beneficiarios.dto.BeneficiarioRequestDTO;
 import br.com.socialconnect.api.beneficiarios.dto.BeneficiarioResponseDTO;
 import br.com.socialconnect.api.beneficiarios.model.Beneficiario;
 import br.com.socialconnect.api.beneficiarios.repository.BeneficiarioRepository;
+import br.com.socialconnect.api.exception.CpfDuplicadoException;
 import br.com.socialconnect.api.exception.RecursoNaoEncontradoException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.PathVariable;
 
 import java.time.LocalDate;
 
@@ -44,7 +44,7 @@ public class BeneficiarioService {
 
     public BeneficiarioResponseDTO criar(BeneficiarioRequestDTO dto) {
         if (repository.existsByCpf(dto.cpf())) {
-            throw new RuntimeException("CPF já cadastrado: " + dto.cpf());
+            throw new CpfDuplicadoException(dto.cpf());
         }
 
         Beneficiario entity = Beneficiario.builder()
@@ -60,6 +60,9 @@ public class BeneficiarioService {
     }
 
     public void deletar(Long idBeneficiario) {
+        if (!repository.existsById(idBeneficiario)) {
+            throw new RecursoNaoEncontradoException("Beneficiário não encontrado: " + idBeneficiario);
+        }
         repository.deleteById(idBeneficiario);
     }
 
